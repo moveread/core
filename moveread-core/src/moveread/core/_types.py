@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 from haskellian import iter as I, either as E, Left, Right, Either, promise as P
 from kv.api import KV
 import pure_cv as vc
-import robust_extraction2 as re
 import chess_pairings as cp
 from chess_notation import Language
 import scoresheet_models as sm
@@ -14,11 +13,17 @@ class Rectangle(TypedDict):
   tl: Vec2
   size: Vec2
 
+class Corners(NamedTuple):
+  tl: Vec2
+  tr: Vec2
+  br: Vec2
+  bl: Vec2
+
 class Image(BaseModel):
   Source: ClassVar = Literal['raw-scan', 'corrected-scan', 'camera', 'corrected-camera', 'robust-corrected'] 
   class Meta(BaseModel):
     source: 'Image.Source | None' = None
-    perspective_corners: re.Corners | None = None
+    perspective_corners: Corners | None = None
     grid_coords: Rectangle | None = None
     """Grid coords (matching some scoresheet model)"""
     box_contours: list | None = None
@@ -50,7 +55,7 @@ class Sheet(BaseModel):
 class Sample(NamedTuple):
   img: vc.Img
   san: str
-  lab: str
+  lab: str | None
 
 class OCRSample(NamedTuple):
   img: vc.Img
@@ -67,7 +72,10 @@ class Player(BaseModel):
       if self.language != 'N/A':
         return self.language
       
-  def labels(self, pgn: Iterable[str]) -> list[str]:
+  sheets: list[Sheet]
+  meta: Meta = Field(default_factory=Meta)
+
+  def labels(self, pgn: Iterable[str]):
     from .export import labels
     return labels(pgn, self.meta)
   
@@ -84,19 +92,24 @@ class Player(BaseModel):
   async def samples(self, pgn: Iterable[str], blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> list[Sample]:
     """Export samples of all exportable sheets.
     - Only the first exportable image of each sheet is taken.
-    - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are."""
+    - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are.
+    - Labels may be `None` if a) annotations are `N/A` or b) moves are after `end_correct`
+    """
     boxes = (await self.boxes(blobs, models, pads=pads)).unsafe()
-    return [Sample(img, san, lab) for img, san, lab in zip(boxes, pgn, self.labels(pgn))]
+    labs = self.labels(pgn).unsafe()
+    def label(idx: int, label: str | None):
+      if self.meta.end_correct is None or idx < self.meta.end_correct:
+        return label
+    return [Sample(img, san, label(i, lab)) for i, (img, san, lab) in enumerate(zip(boxes, pgn, labs))]
   
   @E.do()
   async def ocr_samples(self, pgn: Iterable[str], blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> list[OCRSample]:
-    """Export OCR samples of all exportable sheets."""
+    """Export OCR samples of all exportable sheets.
+    - Skips `None` labels (due to missing annotations of index after `end_correct`)
+    """
     samples = (await self.samples(pgn, blobs, models, pads=pads)).unsafe()
-    return [OCRSample(sample.img, sample.lab) for sample in samples]
+    return [OCRSample(s.img, s.lab) for s in samples if s.lab]
 
-      
-  sheets: list[Sheet]
-  meta: Meta
 
 class Game(BaseModel):
   class Meta(BaseModel):
@@ -129,13 +142,12 @@ class Game(BaseModel):
     if not self.meta.pgn:
       return Left('No PGN')
     samples = await P.all([player.samples(self.meta.pgn, blobs, models, pads=pads) for player in self.players])
-    ok_samples = list(E.filter(samples))
-    if not ok_samples:
-      return Left('No exportable players')
-    return Right(ok_samples)
+    return E.sequence(samples)
   
   @E.do()
   async def ocr_samples(self, blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> list[list[OCRSample]]:
-    """Export OCR samples of all players"""
+    """Export OCR samples of all players
+    - Skips `None` labels (due to missing annotations of index after `end_correct`)
+    """
     samples = (await self.samples(blobs, models, pads=pads)).unsafe()
-    return [[OCRSample(s.img, s.lab) for s in player_samples] for player_samples in samples]
+    return [[OCRSample(s.img, s.lab) for s in player_samples if s.lab] for player_samples in samples]

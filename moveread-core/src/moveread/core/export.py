@@ -1,11 +1,72 @@
-from typing import Never, Iterable
-from haskellian import either as E, Left
+from typing import Never, Iterable, Any
+from haskellian import either as E, Left, Right, Either
 from kv.api import KV
 import pure_cv as vc
 import robust_extraction2 as re
 import scoresheet_models as sm
 import chess_notation as cn
+import chess_utils as cu
 from ._types import Image, Player
+
+def _safe_styled_simple(pgn: Iterable[str], meta: Player.Meta) -> Iterable[str|None]:
+  styles = meta.styles.without_na()
+  for san in pgn:
+    if (
+      styles.pawn_capture is None and cn.is_pawn_capture(san)
+      or styles.piece_capture is None and cn.is_piece_capture(san)
+    ):
+      yield None
+    else:
+      yield cn.style(san, styles)
+
+def _safe_styled_validated(pgn: Iterable[str], meta: Player.Meta) -> Iterable[str|None]:
+  import chess
+  board = chess.Board()
+  styles = meta.styles.without_na()
+  for san in pgn:
+    move = board.parse_san(san)
+    piece = cu.captured_piece(board, move)
+    board.push(move)
+    if (
+      styles.pawn_capture is None and cn.is_pawn_capture(san)
+      or styles.piece_capture is None and cn.is_piece_capture(san)
+    ):
+      yield None
+    else:
+      yield cn.style(san, styles, captured_piece=piece)
+
+def safe_styled(pgn: Iterable[str], meta: Player.Meta) -> Either[Any, list[str|None]]:
+  try:
+    return Right(list(_safe_styled_validated(pgn, meta)))
+  except Exception as e:
+    return Left(e)
+  # if meta.styles.pawn_capture == 'PxN' or meta.styles.piece_capture == 'NxN':
+  #   return _safe_styled_validated(pgn, meta)
+  # else:
+  #   return _safe_styled_simple(pgn, meta)
+
+def labels(pgn: Iterable[str], meta: Player.Meta) -> Either[str, list[str|None]]:
+  """Export labels from the PGN and annotations.
+  - If `meta.language` is 'N/A' or None, returns `Left`
+  - If some annotation is 'N/A', returns `None` on the affected moves
+  """
+  if meta.language == 'N/A':
+    return Left('Language is N/A')
+  elif meta.language is None:
+    return Left('Language is None')
+  
+  styled = safe_styled(pgn, meta).unsafe()
+  labs = [move and cn.translate(move, meta.language) for move in styled]
+  
+  for i, lab in sorted(meta.manual_labels.items()):
+    if i < len(labs):
+      labs[i] = lab
+    elif i == len(labs):
+      labs.append(lab)
+
+  return Right(labs)
+
+
 
 @E.do()
 async def boxes(image: Image, blobs: KV[bytes], model: sm.Model | None = None, *, pads: sm.Pads = {}) -> list[vc.Img]:
@@ -18,14 +79,3 @@ async def boxes(image: Image, blobs: KV[bytes], model: sm.Model | None = None, *
   else:
     Left('No grid coords or box contours').unsafe()
     return Never
-  
-
-def labels(pgn: Iterable[str], meta: Player.Meta):
-  notation = cn.Notation(meta.language_no_na or 'EN', meta.styles.without_na())
-  labs = list(cn.styled(pgn, notation))
-  for i, lab in sorted(meta.manual_labels.items()):
-    if i < len(labs):
-      labs[i] = lab
-    elif i == len(labs):
-      labs.append(lab)
-  return labs
