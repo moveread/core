@@ -16,18 +16,7 @@ app = typer.Typer()
 export = typer.Typer()
 app.add_typer(export, name="export")
 
-async def read_games(path: str, verbose: bool):
-  ds = core.Core.at(path)
-  games = E.sequence(await ds.games.items().sync())
-  if games.tag == 'left':
-    print(f'Found {len(games.value)} errors')
-    if verbose:
-      for e in games.value:
-        print(e)
-    else:
-      print('Run with -v to show errors')
-  
-  return games
+
 
 @export.command('pgn')
 @P.run

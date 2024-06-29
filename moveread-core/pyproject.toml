@@ -23,8 +23,5 @@ repo = "https://github.com/moveread/moveread-data.git"
 [project.scripts]
 core = "moveread.core.cli:app"
 
-# [project.optional-dependencies]
-# test = [
-#   "pytest < 5.0.0",
-#   "pytest-cov[all]"
-# ]
+[project.optional-dependencies]
+cli = ["ocr-dataset", "files-dataset", "typer", "fs-tools"]
