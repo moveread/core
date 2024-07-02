@@ -1,3 +1,4 @@
+from typing import Literal
 import sys
 import os
 import fs
@@ -39,7 +40,17 @@ async def export_labels(path: str, verbose: bool):
       print(f'Game "{id}" has no PGN', file=sys.stderr)
 
 
-async def export_boxes(path: str, output: str, verbose: bool):
+async def export_boxes(
+  path: str, output: str, *, 
+  num_boxes: int | None | Literal['auto'] = 'auto',
+  verbose: bool,
+):
+  """
+  - `num_boxes`:
+    - `'auto'`: Export boxes up to the number of PGN moves
+    - `None`: Export all boxes
+    - `int`: Export at most `num_boxes` boxes
+  """
   games = await cli.read_games(path, True)
   if games.tag == 'left':
     return
@@ -50,7 +61,12 @@ async def export_boxes(path: str, output: str, verbose: bool):
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
     pgn = game.meta.pgn
-    max_boxes = len(pgn) if pgn is not None else None
+
+    if num_boxes == 'auto':
+      max_boxes = len(pgn) if pgn is not None else None
+    else:
+      max_boxes = num_boxes
+
     for j, player in enumerate(game.players):
       either = await player.boxes(ds.blobs, models)
       if either.tag == 'left':
@@ -58,6 +74,9 @@ async def export_boxes(path: str, output: str, verbose: bool):
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
         else:
           print(f'Error in "{id}", player {j}. Run with -v to show full errors', file=sys.stderr)
+        continue
+      elif either.value == []:
+        print(f'WARNING: No boxes found in "{id}", player {j}', file=sys.stderr)
         continue
 
       boxes = either.value[:max_boxes]
@@ -93,6 +112,9 @@ async def export_ocr(path: str, output: str, verbose: bool):
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
         else:
           print(f'Error in "{id}", player {j}. Run with -v to show full errors', file=sys.stderr)
+        continue
+      elif either.value == []:
+        print(f'WARNING: No samples found in "{id}", player {j}', file=sys.stderr)
         continue
 
       samples = [(vc.encode(s.img, '.jpg'), s.lab) for s in either.value]

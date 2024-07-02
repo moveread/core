@@ -49,13 +49,16 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> Either[str, list[str|None]]
   """Export labels from the PGN and annotations.
   - If `meta.language` is 'N/A' or None, returns `Left`
   - If some annotation is 'N/A', returns `None` on the affected moves
+  - The `PGN` is cropped to `meta.end_correct`
+  - If some `meta.manual_labels` exist beyond the end of the PGN, they're ignored
   """
   if meta.language == 'N/A':
     return Left('Language is N/A')
   elif meta.language is None:
     return Left('Language is None')
   
-  styled = safe_styled(pgn, meta).unsafe()
+  cropped_pgn = list(pgn)[:meta.end_correct]
+  styled = safe_styled(cropped_pgn, meta).unsafe()
   labs = [move and cn.translate(move, meta.language) for move in styled]
   
   for i, lab in sorted(meta.manual_labels.items()):
@@ -63,6 +66,8 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> Either[str, list[str|None]]
       labs[i] = lab
     elif i == len(labs):
       labs.append(lab)
+    else:
+      break
 
   return Right(labs)
 

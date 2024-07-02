@@ -3,5 +3,4 @@ twine
 ipykernel
 verify-import
 files-dataset
--e chess-dataset
--e moveread-core
+-e moveread-core[cli]
