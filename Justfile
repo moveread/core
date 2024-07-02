@@ -1,4 +1,4 @@
-mod chess-dataset
+mod moveread-core
 
 VENV := ".venv"
 PYTHON := ".venv/bin/python"
