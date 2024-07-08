@@ -1,6 +1,6 @@
 from typing import Never, Iterable, Any
 from haskellian import either as E, Left, Right, Either
-from kv.api import KV
+from kv import KV
 import pure_cv as vc
 import robust_extraction2 as re
 import scoresheet_models as sm
@@ -75,12 +75,24 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> Either[str, list[str|None]]
 
 @E.do()
 async def boxes(image: Image, blobs: KV[bytes], model: sm.Model | None = None, *, pads: sm.Pads = {}) -> list[vc.Img]:
-  if image.meta.grid_coords and model:
-    img = vc.decode((await blobs.read(image.url)).unsafe())
-    return sm.extract_boxes(img, model, **image.meta.grid_coords, pads=pads)
-  elif image.meta.box_contours:
-    img = vc.decode((await blobs.read(image.url)).unsafe())
-    return re.boxes(img, image.meta.box_contours, **pads) # type: ignore
+  if isinstance(image.meta, Image.OldMeta):
+    if image.meta.grid_coords and model:
+      img = vc.decode((await blobs.read(image.url)).unsafe())
+      return sm.extract_boxes(img, model, **image.meta.grid_coords, pads=pads)
+    elif image.meta.box_contours:
+      img = vc.decode((await blobs.read(image.url)).unsafe())
+      return re.boxes(img, image.meta.box_contours, **pads) # type: ignore
+    else:
+      return Left('No grid coords or box contours').unsafe()
   else:
-    Left('No grid coords or box contours').unsafe()
-    return Never
+    if image.meta.boxes is None:
+      return Left('No boxes').unsafe()
+    
+    if image.meta.boxes.tag == 'box-contours':
+      img = vc.decode((await blobs.read(image.url)).unsafe())
+      return re.boxes(img, image.meta.boxes.contours, **pads) # type: ignore
+    elif model:
+      img = vc.decode((await blobs.read(image.url)).unsafe())
+      return sm.extract_boxes(img, model, **image.meta.boxes.coords, pads=pads)
+    else:
+      return Left('No model').unsafe()

@@ -6,3 +6,6 @@ __pycache__
 *.py[cod]
 data
 dev
+cores
+cores-new
+ocr

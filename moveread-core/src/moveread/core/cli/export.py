@@ -8,8 +8,8 @@ import ocr_dataset as ods
 import scoresheet_models as sm
 from moveread.core import Core, cli
 
-async def export_pgn(path: str, verbose: bool):
-  games = await cli.read_games(path, verbose)
+async def export_pgn(core: Core, verbose: bool):
+  games = await cli.read_games(core, verbose)
   if games.tag == 'left':
     return
   for id, game in sorted(games.value):
@@ -22,8 +22,8 @@ async def export_pgn(path: str, verbose: bool):
       print(f'Game "{id}" has no PGN', file=sys.stderr)
 
 
-async def export_labels(path: str, verbose: bool):
-  games = await cli.read_games(path, verbose)
+async def export_labels(core: Core, verbose: bool):
+  games = await cli.read_games(core, verbose)
   if games.tag == 'left':
     return
   for id, game in sorted(games.value):
@@ -41,7 +41,7 @@ async def export_labels(path: str, verbose: bool):
 
 
 async def export_boxes(
-  path: str, output: str, *, 
+  core: Core, output: str, *, 
   num_boxes: int | None | Literal['auto'] = 'auto',
   verbose: bool,
 ):
@@ -51,12 +51,11 @@ async def export_boxes(
     - `None`: Export all boxes
     - `int`: Export at most `num_boxes` boxes
   """
-  games = await cli.read_games(path, True)
+  games = await cli.read_games(core, True)
   if games.tag == 'left':
     return
   
   models = sm.ModelsCache()
-  ds = Core.at(path)
   total_boxes = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
@@ -68,7 +67,7 @@ async def export_boxes(
       max_boxes = num_boxes
 
     for j, player in enumerate(game.players):
-      either = await player.boxes(ds.blobs, models)
+      either = await player.boxes(core.blobs, models)
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
@@ -93,20 +92,19 @@ async def export_boxes(
 
     print(f'\r{i+1}/{len(games.value)} - {total_boxes:06} boxes', end='', file=sys.stderr)
 
-async def export_ocr(path: str, output: str, verbose: bool):
-  games = await cli.read_games(path, True)
+async def export_ocr(core: Core, output: str, verbose: bool):
+  games = await cli.read_games(core, True)
   if games.tag == 'left':
     return
   
   models = sm.ModelsCache()
-  ds = Core.at(path)
   total_samples = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
     if (pgn := game.meta.pgn) is None:
       continue
     for j, player in enumerate(game.players):
-      either = await player.ocr_samples(pgn, ds.blobs, models)
+      either = await player.ocr_samples(pgn, core.blobs, models)
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)

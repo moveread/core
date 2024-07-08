@@ -1,9 +1,8 @@
 from haskellian import either as E
 from moveread.core import Core
 
-async def read_games(path: str, verbose: bool):
-  ds = Core.at(path)
-  games = E.sequence(await ds.games.items().sync())
+async def read_games(core: Core, verbose: bool):
+  games = E.sequence(await core.games.items().sync())
   if games.tag == 'left':
     print(f'Found {len(games.value)} errors')
     if verbose:

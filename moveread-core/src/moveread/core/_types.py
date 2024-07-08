@@ -1,7 +1,7 @@
 from typing_extensions import Literal, Sequence, Iterable, TypedDict, ClassVar, Any, NamedTuple
 from pydantic import BaseModel, Field
 from haskellian import iter as I, either as E, Left, Right, Either, promise as P
-from kv.api import KV
+from kv import KV
 import pure_cv as vc
 import chess_pairings as cp
 from chess_notation import Language
@@ -22,16 +22,39 @@ class Corners(NamedTuple):
 
 class Image(BaseModel):
   Source: ClassVar = Literal['raw-scan', 'corrected-scan', 'camera', 'corrected-camera', 'robust-corrected'] 
-  class Meta(BaseModel):
+  class OldMeta(BaseModel):
     source: 'Image.Source | None' = None
     perspective_corners: Corners | None = None
     grid_coords: Rectangle | None = None
     """Grid coords (matching some scoresheet model)"""
     box_contours: list | None = None
     """Explicit box contours (given by robust-extraction, probably)"""
+  class Meta(BaseModel):
+    class BoxContours(BaseModel):
+      tag: Literal['box-contours'] = 'box-contours'
+      contours: list
+
+    class GridCoords(BaseModel):
+      tag: Literal['grid-coords'] = 'grid-coords'
+      model: sm.Model
+      coords: Rectangle
+    source: 'Image.Source | None' = None
+    perspective_corners: Corners | None = None
+    boxes: BoxContours | GridCoords | None = Field(None, discriminator='tag')
+
+    @staticmethod
+    def from_old(meta: 'Image.OldMeta', model: sm.Model | None = None) -> 'Image.Meta':
+      if meta.box_contours:
+        boxes = BoxContours(contours=meta.box_contours)
+      elif meta.grid_coords:
+        assert model is not None
+        boxes = GridCoords(model=model, coords=meta.grid_coords)
+      else:
+        boxes = None
+      return Image.Meta(source=meta.source, perspective_corners=meta.perspective_corners, boxes=boxes)
 
   url: str
-  meta: Meta = Field(default_factory=Meta)
+  meta: Meta | OldMeta = Field(default_factory=lambda: Image.Meta(boxes=None))
 
   async def export(self, blobs: KV[bytes], model: sm.Model | None = None, *, pads: sm.Pads = {}):
     from .export import boxes

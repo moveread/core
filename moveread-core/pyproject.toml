@@ -4,16 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moveread-core"
-version = "0.2.3"
+version = "0.2.4"
 authors = [
   {name="Marcel Claramunt", email="marcel@moveread.com"}
 ]
 description = "Core Moveread Dataset"
 dependencies = [
   "pydantic", "haskellian", "robust-extraction2",
-  "chess-pairings", "chess-notation",
-  "kv-api", "kv-sqlite-sync", "kv-fs",
-  "scoresheet-models", "chess-utils"
+  "chess-pairings", "chess-notation", "python-kv",
+  "scoresheet-models", "chess-utils", "sequence-edits"
 ]
 requires-python = ">=3.10"
 readme = {file="README.md", content-type="text/markdown"}
