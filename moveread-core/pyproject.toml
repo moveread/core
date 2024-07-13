@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moveread-core"
-version = "0.2.4"
+version = "0.2.10"
 authors = [
   {name="Marcel Claramunt", email="marcel@moveread.com"}
 ]
@@ -24,4 +24,4 @@ repo = "https://github.com/moveread/core.git"
 core = "moveread.core.cli:app"
 
 [project.optional-dependencies]
-cli = ["ocr-dataset", "files-dataset", "typer", "fs-tools"]
+cli = ["ocr-dataset", "files-dataset", "typer", "fs-tools", "python-dotenv"]

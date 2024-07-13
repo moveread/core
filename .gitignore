@@ -9,3 +9,4 @@ dev
 cores
 cores-new
 ocr
+.env

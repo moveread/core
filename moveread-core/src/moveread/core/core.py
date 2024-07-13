@@ -21,7 +21,7 @@ class Core:
 
   @staticmethod
   def of(games_conn_str: str, blobs_conn_str: str) -> 'Core':
-    return Core(KV.of(games_conn_str), KV.of(blobs_conn_str))
+    return Core(KV.of(games_conn_str, Game), KV.of(blobs_conn_str))
   
   @staticmethod
   def at(path: str) -> 'Core':
@@ -58,12 +58,33 @@ class Core:
       if any(results):
         Left(ExistentBlobs([img.url for (_, img), exists in zip(game.images, results) if exists])).unsafe()
 
-    if (await other.games.has(toId)).unsafe():
-      Left(ExistentGame()).unsafe()
+      if (await other.games.has(toId)).unsafe():
+        Left(ExistentGame()).unsafe()
 
     img_tasks = [self.blobs.copy(img.url, other.blobs, img.url) for _, img in game.images]
     E.sequence(await P.all(img_tasks)).unsafe()
     (await other.games.insert(toId, game)).unsafe()
+
+
+  @E.do[ReadError]()
+  async def dump(
+    self, other: 'Core', prefix: str = '',
+    overwrite: bool = False, logstream: TextIO | None = None
+  ):
+    """Copy all games from `self` to `other`."""
+    if logstream:
+      print('Reading keys...')
+    keys = await self.games.keys().map(E.unsafe).sync()
+    skipped = 0
+    for i, key in enumerate(keys):
+      if logstream:
+        print(f'\rDownloading... [{i+1}/{len(keys)}] - skipped {skipped}', end='', flush=True, file=logstream)
+      r = await self.copy(key, other, prefix + key, overwrite=overwrite)
+      if isinstance(r.value, ExistentBlobs) or isinstance(r.value, ExistentGame):
+        skipped += 1
+      else:
+        r.unsafe()
+
 
 
 def glob(glob: str, *, recursive: bool = False, err_stream: TextIO | None = None) -> list[Core]:

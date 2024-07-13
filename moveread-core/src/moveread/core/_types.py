@@ -42,16 +42,16 @@ class Image(BaseModel):
     perspective_corners: Corners | None = None
     boxes: BoxContours | GridCoords | None = Field(None, discriminator='tag')
 
-    @staticmethod
-    def from_old(meta: 'Image.OldMeta', model: sm.Model | None = None) -> 'Image.Meta':
+    @classmethod
+    def from_old(cls, meta: 'Image.OldMeta', model: sm.Model | None = None) -> 'Image.Meta':
       if meta.box_contours:
-        boxes = BoxContours(contours=meta.box_contours)
+        boxes = Image.Meta.BoxContours(contours=meta.box_contours)
       elif meta.grid_coords:
         assert model is not None
-        boxes = GridCoords(model=model, coords=meta.grid_coords)
+        boxes = Image.Meta.GridCoords(model=model, coords=meta.grid_coords)
       else:
         boxes = None
-      return Image.Meta(source=meta.source, perspective_corners=meta.perspective_corners, boxes=boxes)
+      return cls(source=meta.source, perspective_corners=meta.perspective_corners, boxes=boxes)
 
   url: str
   meta: Meta | OldMeta = Field(default_factory=lambda: Image.Meta(boxes=None))
