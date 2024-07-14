@@ -83,18 +83,9 @@ def export_callback(
 def export_pgn(cores = Cores, verbose: bool = Verbose):
   """Export player SANs, one by line, space-delimited. Tthe same PGN will be repeated for each player."""
   for ds in cores:
-    if verbose:
-      print(f'Exporting PGNs from {ds}', file=sys.stderr)
+    print(f'Exporting PGNs from {ds}', file=sys.stderr)
     P.run(core.cli.export_pgn)(ds, verbose)
-
-@export.command('labels')
-def export_labels(cores = Cores, verbose: bool = Verbose):
-  """Export player labels, one by line, space-delimited"""
-  for ds in cores:
-    if verbose:
-      print(f'Exporting PGNs from {ds}', file=sys.stderr)
-    P.run(core.cli.export_labels)(ds, verbose)
-
+    print(file=sys.stderr)
 
 def parse_num_boxes(num_boxes: str) -> int | Literal['auto'] | None:
   if num_boxes == 'none':
@@ -114,9 +105,9 @@ def export_boxes(
 ):
   """Export boxes in `files-dataset` format. (Only as many boxes as moves in the corresponding PGNs)"""
   for ds in cores:
-    if verbose:
-      print(f'Exporting boxes from {ds}', file=sys.stderr)
+    print(f'Exporting boxes from {ds}', file=sys.stderr)
     P.run(core.cli.export_boxes)(ds, output, verbose=verbose, num_boxes=parse_num_boxes(num_boxes))
+    print(file=sys.stderr)
 
 @export.command('ocr')
 def export_ocr(
@@ -125,9 +116,9 @@ def export_ocr(
 ):
   """Export OCR samples in `ocr-dataset` format."""
   for ds in cores:
-    if verbose:
-      print(f'Exporting OCR samples from {ds}', file=sys.stderr)
+    print(f'Exporting OCR samples from {ds}', file=sys.stderr)
     P.run(core.cli.export_ocr)(ds, output, verbose)
+    print(file=sys.stderr)
 
 if __name__ == '__main__':
   app()

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Iterable
 import sys
 import os
 import fs
@@ -14,28 +14,15 @@ async def export_pgn(core: Core, verbose: bool):
     return
   for id, game in sorted(games.value):
     if game.meta.pgn:
-      line = ' '.join(game.meta.pgn)
-      for _ in game.players:
-        print(line)
-    elif verbose:
-      import sys
-      print(f'Game "{id}" has no PGN', file=sys.stderr)
-
-
-async def export_labels(core: Core, verbose: bool):
-  games = await cli.read_games(core, verbose)
-  if games.tag == 'left':
-    return
-  for id, game in sorted(games.value):
-    if game.meta.pgn:
       for player in game.players:
         labs = player.labels(game.meta.pgn)
-        if labs.tag == 'right':
-          print(' '.join(l for l in labs.value if l))
-        elif verbose:
-          print(f'Error exporting "{id}":', labs.value, file=sys.stderr)
-        else:
-          print(f'Error exporting "{id}". Run with -v to show the full error', file=sys.stderr)
+        if labs.tag == 'left':
+          if verbose:
+            print(f'Error exporting "{id}":', labs.value, file=sys.stderr)
+          continue
+        pgn = game.meta.pgn[:player.meta.end_correct]
+        line = ' '.join(pgn)
+        print(line)
     elif verbose:
       print(f'Game "{id}" has no PGN', file=sys.stderr)
 
@@ -59,7 +46,10 @@ async def export_boxes(
   total_boxes = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
-    pgn = game.meta.pgn
+    if not (pgn := game.meta.pgn):
+      if verbose:
+        print(f'WARNING: No/empty PGN found in "{id}"', file=sys.stderr)
+      continue
 
     if num_boxes == 'auto':
       max_boxes = len(pgn) if pgn is not None else None
@@ -67,15 +57,24 @@ async def export_boxes(
       max_boxes = num_boxes
 
     for j, player in enumerate(game.players):
+      labs = player.labels(pgn)
+      if labs.tag == 'left':
+        if verbose:
+          print(f'Error in "{id}", player {j}:', labs.value, file=sys.stderr)
+        continue
+      elif labs.value == []:
+        if verbose:
+          print(f'WARNING: Empty labels found in "{id}", player {j}', file=sys.stderr)
+        continue
+      
       either = await player.boxes(core.blobs, models)
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
-        else:
-          print(f'Error in "{id}", player {j}. Run with -v to show full errors', file=sys.stderr)
         continue
       elif either.value == []:
-        print(f'WARNING: No boxes found in "{id}", player {j}', file=sys.stderr)
+        if verbose:
+          print(f'WARNING: No boxes found in "{id}", player {j}', file=sys.stderr)
         continue
 
       boxes = either.value[:max_boxes]
@@ -108,11 +107,10 @@ async def export_ocr(core: Core, output: str, verbose: bool):
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
-        else:
-          print(f'Error in "{id}", player {j}. Run with -v to show full errors', file=sys.stderr)
         continue
       elif either.value == []:
-        print(f'WARNING: No samples found in "{id}", player {j}', file=sys.stderr)
+        if verbose:
+          print(f'WARNING: No samples found in "{id}", player {j}', file=sys.stderr)
         continue
 
       samples = [(vc.encode(s.img, '.jpg'), s.lab) for s in either.value]
