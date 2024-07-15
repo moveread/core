@@ -62,16 +62,9 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> list[str|None]:
   return labs  
 
 @E.do()
-async def boxes(image: Image, blobs: KV[bytes], model: sm.Model | None = None, *, pads: sm.Pads = {}) -> list[vc.Img]:
+async def boxes(image: Image, blobs: KV[bytes], *, pads: sm.Pads = {}) -> list[vc.Img]:
   if isinstance(image.meta, Image.OldMeta):
-    if image.meta.grid_coords and model:
-      img = vc.decode((await blobs.read(image.url)).unsafe())
-      return sm.extract_boxes(img, model, **image.meta.grid_coords, pads=pads)
-    elif image.meta.box_contours:
-      img = vc.decode((await blobs.read(image.url)).unsafe())
-      return re.boxes(img, image.meta.box_contours, **pads) # type: ignore
-    else:
-      return Left('No grid coords or box contours').unsafe()
+    raise ValueError('OldMeta is not supported')
   else:
     if image.meta.boxes is None:
       return Left('No boxes').unsafe()
@@ -79,8 +72,6 @@ async def boxes(image: Image, blobs: KV[bytes], model: sm.Model | None = None, *
     if image.meta.boxes.tag == 'box-contours':
       img = vc.decode((await blobs.read(image.url)).unsafe())
       return re.boxes(img, image.meta.boxes.contours, **pads) # type: ignore
-    elif model:
-      img = vc.decode((await blobs.read(image.url)).unsafe())
-      return sm.extract_boxes(img, model, **image.meta.boxes.coords, pads=pads)
     else:
-      return Left('No model').unsafe()
+      img = vc.decode((await blobs.read(image.url)).unsafe())
+      return sm.extract_boxes(img, image.meta.boxes.model, **image.meta.boxes.coords, pads=pads)

@@ -42,7 +42,6 @@ async def export_boxes(
   if games.tag == 'left':
     return
   
-  models = sm.ModelsCache()
   total_boxes = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
@@ -67,7 +66,7 @@ async def export_boxes(
           print(f'WARNING: Empty labels found in "{id}", player {j}', file=sys.stderr)
         continue
       
-      either = await player.boxes(core.blobs, models)
+      either = await player.boxes(core.blobs)
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)
@@ -96,14 +95,13 @@ async def export_ocr(core: Core, output: str, verbose: bool):
   if games.tag == 'left':
     return
   
-  models = sm.ModelsCache()
   total_samples = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
     if (pgn := game.meta.pgn) is None:
       continue
     for j, player in enumerate(game.players):
-      either = await player.ocr_samples(pgn, core.blobs, models)
+      either = await player.ocr_samples(pgn, core.blobs)
       if either.tag == 'left':
         if verbose:
           print(f'Error in "{id}", player {j}', either.value, file=sys.stderr)

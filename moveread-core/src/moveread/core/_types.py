@@ -56,9 +56,14 @@ class Image(BaseModel):
   url: str
   meta: Meta | OldMeta = Field(default_factory=lambda: Image.Meta(boxes=None))
 
-  async def export(self, blobs: KV[bytes], model: sm.Model | None = None, *, pads: sm.Pads = {}):
+  async def export(self, blobs: KV[bytes], *, pads: sm.Pads = {}):
     from .export import boxes
-    return await boxes(self, blobs, model, pads=pads)
+    return await boxes(self, blobs, pads=pads)
+  
+  def exportable(self):
+    if isinstance(self.meta, Image.OldMeta):
+      raise ValueError('OldMeta is not supported')
+    return self.meta.boxes is not None
 
 
 class Sheet(BaseModel):
@@ -67,11 +72,10 @@ class Sheet(BaseModel):
   images: list[Image]
   meta: Meta
 
-  async def boxes(self, blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
+  async def boxes(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
     """Export boxes of the first exportable image. Returns `Left` if none of the images are exportable"""
-    model = (await models.fetch(self.meta.model)).unsafe()
     for image in self.images:
-      boxes = await image.export(blobs, model, pads=pads)
+      boxes = await image.export(blobs, pads=pads)
       if boxes.tag == 'right':
         return boxes
     return Left('No exportable images')
@@ -98,24 +102,29 @@ class Player(BaseModel):
   def labels(self, pgn: Iterable[str]):
     from .export import labels
     return labels(pgn, self.meta)
+
+  def exportable(self):
+    lang_ok = self.meta.language and self.meta.language != 'N/A'
+    boxes_ok = any(img.exportable() for sheet in self.sheets for img in sheet.images)
+    return lang_ok and boxes_ok
   
-  async def boxes(self, blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
+  async def boxes(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
     """Export boxes of all exportable sheets.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are."""
-    all_boxes = await P.all([sheet.boxes(blobs, models, pads=pads) for sheet in self.sheets])
+    all_boxes = await P.all([sheet.boxes(blobs, pads=pads) for sheet in self.sheets])
     if not all_boxes or all_boxes[0].tag == 'left':
       return Left('No exportable sheets')
     return Right(I.flatten(E.take_while(all_boxes)).sync())
   
   @E.do()
-  async def ocr_samples(self, pgn: Iterable[str], blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> list[Sample]:
+  async def ocr_samples(self, pgn: Iterable[str], blobs: KV[bytes], *, pads: sm.Pads = {}) -> list[Sample]:
     """Export samples of all exportable sheets.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are.
     """
     labs = self.labels(pgn).unsafe()
-    boxes = (await self.boxes(blobs, models, pads=pads)).unsafe()
+    boxes = (await self.boxes(blobs, pads=pads)).unsafe()
     edited_boxes = se.apply(self.meta.edits, boxes)
     return [Sample(img, lab) for img, lab in zip(edited_boxes, labs) if lab is not None and img is not None]
 
@@ -143,12 +152,12 @@ class Game(BaseModel):
       for k, image in enumerate(sheet.images):
         yield (i, j, k), image
 
-  async def ocr_samples(self, blobs: KV[bytes], models: sm.ModelsCache, *, pads: sm.Pads = {}) -> Either[Any, list[list[Sample]]]:
+  async def ocr_samples(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[list[Sample]]]:
     """Export OCR samples of all players.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the game's meta has no PGN or no player is exportable"""
     if not self.meta.pgn:
       return Left('No PGN')
-    samples = await P.all([player.ocr_samples(self.meta.pgn, blobs, models, pads=pads) for player in self.players])
+    samples = await P.all([player.ocr_samples(self.meta.pgn, blobs, pads=pads) for player in self.players])
     return E.sequence(samples)
   
