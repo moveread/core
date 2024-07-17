@@ -1,5 +1,6 @@
 from typing import Sequence, Literal, TextIO
 from dataclasses import dataclass
+import asyncio
 from haskellian import Left, either as E, promise as P
 from kv import KV, ReadError
 from ._types import Game
@@ -63,22 +64,32 @@ class Core:
 
   @E.do[ReadError]()
   async def dump(
-    self, other: 'Core', prefix: str = '',
+    self, other: 'Core', prefix: str = '', *, concurrent: int = 1,
     overwrite: bool = False, logstream: TextIO | None = None
   ):
     """Copy all games from `self` to `other`."""
     if logstream:
       print('Reading keys...')
     keys = await self.games.keys().map(E.unsafe).sync()
+    semaphore = asyncio.Semaphore(concurrent)
     skipped = 0
-    for i, key in enumerate(keys):
-      if logstream:
-        print(f'\rDownloading... [{i+1}/{len(keys)}] - skipped {skipped}', end='', flush=True, file=logstream)
-      r = await self.copy(key, other, prefix + key, overwrite=overwrite)
-      if isinstance(r.value, ExistentBlobs) or isinstance(r.value, ExistentGame):
-        skipped += 1
-      else:
-        r.unsafe()
+    done = 0
+    tasks = []
+    for key in keys:
+      async def task(key: str):
+        nonlocal skipped, done
+        async with semaphore:
+          if logstream:
+            print(f'\rDownloading... [{done+1}/{len(keys)}] - skipped {skipped}', end='', flush=True, file=logstream)
+          r = await self.copy(key, other, prefix + key, overwrite=overwrite)
+          if isinstance(r.value, ExistentBlobs) or isinstance(r.value, ExistentGame):
+            skipped += 1
+          else:
+            r.unsafe()
+          done += 1
+      tasks.append(task(key))
+    
+    await asyncio.gather(*tasks)
 
 
 

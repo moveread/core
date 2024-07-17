@@ -1,13 +1,8 @@
-from typing import Literal, cast
-import asyncio
-import os
 import sys
 from haskellian import promise as P
-import kv
 import typer
-from typer_tools import Dependency, option
 from moveread import core
-from moveread.core.cli import Env, Debug, core_dep, Prefix, Verbose, Force
+from moveread.core.cli import Env, Debug, core_dep, Prefix, Verbose, Force, Concurrent
 from .list import list_app
 from .export import export_app
 
@@ -26,7 +21,7 @@ def dump(
   inp_core: 'core.Core' = core_dep.Depends(),
   prefix: str = Prefix, verbose: bool = Verbose,
   output: str = typer.Option(..., '-o', '--output', help='Path to output core'),
-  force: bool = Force,
+  force: bool = Force, concurrent: int = Concurrent
 ):
   """Dump an online dataset to disk"""
   if prefix:
@@ -34,13 +29,13 @@ def dump(
     prefix = prefix.rstrip('/') + '/'
   out_core = core.Core.at(output)
   run = P.run(inp_core.dump) # type: ignore
-  run(out_core, prefix, overwrite=force, logstream=sys.stderr if verbose else None)
+  run(out_core, prefix, overwrite=force, logstream=sys.stderr if verbose else None, concurrent=concurrent)
 
 @app.command()
 @core_dep.inject
 def upload(
   input: str = typer.Option(..., '-i', '--input', help='Path to input local core'),
-  out_core: 'core.Core' = core_dep.Depends(),
+  out_core: 'core.Core' = core_dep.Depends(), concurrent: int = Concurrent,
   prefix: str = Prefix, verbose: bool = Verbose, force: bool = Force,
 ):
   inp_core = core.Core.read(input)
@@ -48,5 +43,5 @@ def upload(
     inp_core.games = inp_core.games.prefix(prefix)
     prefix = prefix.rstrip('/') + '/'
   run = P.run(out_core.dump) # type: ignore
-  run(out_core, prefix, overwrite=force, logstream=sys.stderr if verbose else None)
+  run(out_core, prefix, overwrite=force, logstream=sys.stderr if verbose else None, concurrent=concurrent)
 

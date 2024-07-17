@@ -21,6 +21,7 @@ Debug = option(False, '--debug', help='Enable debugging', callback=debug_callbac
 Verbose = option(False, '-v', '--verbose', help='Enable verbose output')
 Prefix = option('', '--prefix', help='Prefix for metadata keys')
 Force = option(False, '-f', '--force', help='Overwrite existing files')
+Concurrent = option(1, '-c', '--concurrent', help='Number of concurrent tasks')
 
 def parse_core(
   path: str = typer.Option('', '-p', '--path', help='Path to local core'),
