@@ -50,16 +50,11 @@ class Core:
   @E.do[ReadError|ExistentBlobs|ExistentGame]()
   async def copy(self, fromId: str, other: 'Core', toId: str, *, overwrite: bool = False) -> None:
     """Copies `fromId` of `self` to `toId` in `other`."""
-    game = (await self.games.read(fromId)).unsafe()
-
     if not overwrite:
-      tasks = [other.blobs.has(img.url) for _, img in game.images]
-      results = E.sequence(await P.all(tasks)).unsafe()
-      if any(results):
-        Left(ExistentBlobs([img.url for (_, img), exists in zip(game.images, results) if exists])).unsafe()
-
       if (await other.games.has(toId)).unsafe():
-        Left(ExistentGame()).unsafe()
+        return Left(ExistentGame()).unsafe()
+
+    game = (await self.games.read(fromId)).unsafe()
 
     img_tasks = [self.blobs.copy(img.url, other.blobs, img.url) for _, img in game.images]
     E.sequence(await P.all(img_tasks)).unsafe()

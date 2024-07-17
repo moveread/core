@@ -62,7 +62,8 @@ class Image(BaseModel):
   
   def exportable(self):
     if isinstance(self.meta, Image.OldMeta):
-      raise ValueError('OldMeta is not supported')
+      return False
+      # raise ValueError('OldMeta is not supported')
     return self.meta.boxes is not None
 
 

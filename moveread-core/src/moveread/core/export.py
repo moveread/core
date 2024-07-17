@@ -64,7 +64,8 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> list[str|None]:
 @E.do()
 async def boxes(image: Image, blobs: KV[bytes], *, pads: sm.Pads = {}) -> list[vc.Img]:
   if isinstance(image.meta, Image.OldMeta):
-    raise ValueError('OldMeta is not supported')
+    # raise ValueError('OldMeta is not supported')
+    return Left('OldMeta is not supported').unsafe()
   else:
     if image.meta.boxes is None:
       return Left('No boxes').unsafe()

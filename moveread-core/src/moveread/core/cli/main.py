@@ -36,6 +36,7 @@ def callback(
 
 @app.command()
 def dump(
+  input: str = typer.Option('', '-i', '--input', help='Path to input local core'),
   meta: str = typer.Option('', '-m', '--meta', help='KV connection string to meta. Can also be set via a CORE_META env var'),
   blobs: str = typer.Option('', '-b', '--blobs', help='KV connection string to blobs. Can also be set via a CORE_BLOBS env var'),
   output: str = typer.Option(..., '-o', '--output', help='Output directory'),
@@ -44,16 +45,42 @@ def dump(
   verbose: bool = Verbose,
 ):
   """Dump an online dataset to disk"""
+  if input:
+    inp_core = core.Core.read(input)
+  else:
+    meta = meta or os.getenv('CORE_META') or ''
+    blobs = blobs or os.getenv('CORE_BLOBS') or ''
+    if not meta or not blobs:
+      raise typer.BadParameter('Both --meta and --blobs must be provided')
+    inp_core = core.Core.of(meta, blobs)
+  
+  if prefix:
+    inp_core.games = inp_core.games.prefix(prefix)
+    prefix = prefix.rstrip('/') + '/'
+    
+  out_core = core.Core.at(output)
+  P.run(inp_core.dump)(out_core, prefix, overwrite=overwrite, logstream=sys.stderr if verbose else None) # type: ignore
+
+@app.command()
+def upload(
+  input: str = typer.Option(..., '-i', '--input', help='Path to input local core'),
+  meta: str = typer.Option('', '-m', '--meta', help='KV connection string to meta. Can also be set via a CORE_META env var'),
+  blobs: str = typer.Option('', '-b', '--blobs', help='KV connection string to blobs. Can also be set via a CORE_BLOBS env var'),
+  prefix: str = typer.Option('', '-p', '--prefix', help='Prefix for metadata keys'),
+  overwrite: bool = typer.Option(False, '-f', '--force', help='Overwrite existing files'),
+  verbose: bool = Verbose,
+):
+  """Upload a local dataset"""
+  inp_core = core.Core.read(input)
+  if prefix:
+    inp_core.games = inp_core.games.prefix(prefix)
+    prefix = prefix.rstrip('/') + '/'
+    
   meta = meta or os.getenv('CORE_META') or ''
   blobs = blobs or os.getenv('CORE_BLOBS') or ''
   if not meta or not blobs:
     raise typer.BadParameter('Both --meta and --blobs must be provided')
-  games = kv.KV.of(meta, core.Game)
-  if prefix:
-    games = games.prefix(prefix)
-  inp_core = core.Core(games, kv.KV.of(blobs))
-  out_core = core.Core.at(output)
-  prefix = prefix.rstrip('/') + '/'
+  out_core = core.Core.of(meta, blobs)
   P.run(inp_core.dump)(out_core, prefix, overwrite=overwrite, logstream=sys.stderr if verbose else None) # type: ignore
 
 @export.callback()
