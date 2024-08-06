@@ -60,7 +60,7 @@ async def transformer(
   total_samples = i = 0
   for i, (id, game) in enumerate(sorted(games.value)):
     base = os.path.join(output, id.replace('/', '-'))
-    if (pgn := game.meta.pgn) is None:
+    if not (pgn := game.meta.pgn):
       continue
     for j, player in enumerate(game.players):
       either = await player.boxes(core.blobs)
