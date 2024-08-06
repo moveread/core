@@ -1,10 +1,12 @@
-import typer
+from itertools import zip_longest
 import os
 import sys
-from haskellian import promise as P
+import typer
+from haskellian import promise as P, iter as I
 import pure_cv as vc
 import ocr_dataset as ods
 from moveread.core import Core, cli
+
 
 export_app = typer.Typer(no_args_is_help=True)
 
@@ -48,7 +50,7 @@ async def ocr(
 @P.run
 async def transformer(
   core: Core = cli.core_dep.Depends(), verbose: bool = cli.Verbose,
-  output: str = typer.Option(..., '-o', '--output', help='Output base')
+  output: str = typer.Option(..., '-o', '--output', help='Output base'),
 ):
   """Exports PGNs and all boxes in `ocr-dataset` format"""
   games = await cli.read_games(core, True)
@@ -71,7 +73,7 @@ async def transformer(
           print(f'WARNING: No samples found in "{id}", player {j}', file=sys.stderr)
         continue
 
-      samples = [(vc.encode(img, '.jpg'), san) for img, san in zip(either.value, pgn)]
+      samples = [(vc.encode(img, '.jpg'), I.at(i, pgn) or '') for i, img in enumerate(either.value)]
       ods.create_tar(f'{base}-{j}', samples, images_name='boxes', labels_name='pgn')
       total_samples += len(samples)
 
