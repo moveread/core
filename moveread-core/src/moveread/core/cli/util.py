@@ -8,6 +8,7 @@ def env_callback(value: bool):
   if value:
     from dotenv import load_dotenv
     load_dotenv()
+
 Env = option(False, '-e', '--env', is_eager=True, help='Load variables from .env file', callback=env_callback)
 
 def debug_callback(value: bool):
