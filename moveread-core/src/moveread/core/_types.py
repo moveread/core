@@ -47,6 +47,7 @@ class Image(BaseModel):
   Source: ClassVar = ImageSource
   BoxContours: ClassVar = BoxContours
   GridCoords: ClassVar = GridCoords
+  Boxes: ClassVar = Boxes
   Perspective: ClassVar = Perspective
 
   class Meta(BaseModel):
