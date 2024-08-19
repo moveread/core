@@ -20,50 +20,49 @@ class Corners(NamedTuple):
   br: Vec2
   bl: Vec2
 
+class Pads(TypedDict):
+  l: float
+  r: float
+  t: float
+  b: float
+
+class BoxContours(BaseModel):
+  tag: Literal['box-contours'] = 'box-contours'
+  contours: list
+
+class GridCoords(BaseModel):
+  tag: Literal['grid-coords'] = 'grid-coords'
+  model: sm.Model
+  coords: Rectangle
+
+Boxes = BoxContours | GridCoords
+
+class Perspective(BaseModel):
+  corners: Corners
+  pads: Pads
+  boxes: Boxes | None = None
+
+ImageSource = Literal['raw-scan', 'corrected-scan', 'camera', 'corrected-camera', 'robust-corrected']
 class Image(BaseModel):
-  Source: ClassVar = Literal['raw-scan', 'corrected-scan', 'camera', 'corrected-camera', 'robust-corrected'] 
-  class OldMeta(BaseModel):
-    source: 'Image.Source | None' = None
-    perspective_corners: Corners | None = None
-    grid_coords: Rectangle | None = None
-    """Grid coords (matching some scoresheet model)"""
-    box_contours: list | None = None
-    """Explicit box contours (given by robust-extraction, probably)"""
+  Source: ClassVar = ImageSource
+  BoxContours: ClassVar = BoxContours
+  GridCoords: ClassVar = GridCoords
+  Perspective: ClassVar = Perspective
+
   class Meta(BaseModel):
-    class BoxContours(BaseModel):
-      tag: Literal['box-contours'] = 'box-contours'
-      contours: list
-
-    class GridCoords(BaseModel):
-      tag: Literal['grid-coords'] = 'grid-coords'
-      model: sm.Model
-      coords: Rectangle
-    source: 'Image.Source | None' = None
-    perspective_corners: Corners | None = None
-    boxes: BoxContours | GridCoords | None = Field(None, discriminator='tag')
-
-    @classmethod
-    def from_old(cls, meta: 'Image.OldMeta', model: sm.Model | None = None) -> 'Image.Meta':
-      if meta.box_contours:
-        boxes = Image.Meta.BoxContours(contours=meta.box_contours)
-      elif meta.grid_coords:
-        assert model is not None
-        boxes = Image.Meta.GridCoords(model=model, coords=meta.grid_coords)
-      else:
-        boxes = None
-      return cls(source=meta.source, perspective_corners=meta.perspective_corners, boxes=boxes)
+    source: ImageSource | None = None
+    # perspective_corners: Corners | None = None
+    corrected: Perspective | None = None
+    boxes: Boxes | None = Field(None, discriminator='tag')
 
   url: str
-  meta: Meta | OldMeta = Field(default_factory=lambda: Image.Meta(boxes=None))
+  meta: Meta = Field(default_factory=lambda: Image.Meta(boxes=None))
 
   async def export(self, blobs: KV[bytes], *, pads: sm.Pads = {}):
     from .export import boxes
     return await boxes(self, blobs, pads=pads)
   
   def exportable(self):
-    if isinstance(self.meta, Image.OldMeta):
-      return False
-      # raise ValueError('OldMeta is not supported')
     return self.meta.boxes is not None
 
 
