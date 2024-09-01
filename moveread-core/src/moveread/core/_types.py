@@ -1,4 +1,4 @@
-from typing_extensions import Literal, Sequence, Iterable, TypedDict, ClassVar, Any, NamedTuple
+from typing_extensions import Literal, Sequence, Iterable, ClassVar, Any, NamedTuple
 from pydantic import BaseModel, Field
 from haskellian import iter as I, either as E, Left, Right, Either, promise as P
 from kv import KV
@@ -9,57 +9,32 @@ import scoresheet_models as sm
 import sequence_edits as se
 from .labels import StylesNA, NA
 
-Vec2 = tuple[float, float]
-class Rectangle(TypedDict):
-  tl: Vec2
-  size: Vec2
-
-class Corners(NamedTuple):
-  tl: Vec2
-  tr: Vec2
-  br: Vec2
-  bl: Vec2
-
-class Pads(TypedDict):
-  l: float
-  r: float
-  t: float
-  b: float
-
-class BoxContours(BaseModel):
-  tag: Literal['box-contours'] = 'box-contours'
-  contours: list
-
-class GridCoords(BaseModel):
-  tag: Literal['grid-coords'] = 'grid-coords'
-  model: sm.Model
-  coords: Rectangle
-
-Boxes = BoxContours | GridCoords
-
-class Perspective(BaseModel):
-  corners: Corners
-  pads: Pads
-  boxes: Boxes | None = None
-
-ImageSource = Literal['raw-scan', 'corrected-scan', 'camera', 'corrected-camera', 'robust-corrected']
+ImageSource = Literal['robust-extraction', 'manual'] | str
 class Image(BaseModel):
   Source: ClassVar = ImageSource
-  BoxContours: ClassVar = BoxContours
-  GridCoords: ClassVar = GridCoords
-  Boxes: ClassVar = Boxes
-  Perspective: ClassVar = Perspective
+
+  class BoxContours(BaseModel):
+    tag: Literal['box-contours'] = 'box-contours'
+    contours: 'vc.Contours'
+
+  class GridCoords(BaseModel):
+    tag: Literal['grid-coords'] = 'grid-coords'
+    model: sm.Model
+    coords: 'vc.Rect'
+
+  Boxes: ClassVar = BoxContours | GridCoords
 
   class Meta(BaseModel):
     source: ImageSource | None = None
-    # perspective_corners: Corners | None = None
-    corrected: Perspective | None = None
-    boxes: Boxes | None = Field(None, discriminator='tag')
+    perspective_corners: 'vc.Corners | None' = None
+    boxes: 'Image.Boxes | None' = Field(None, discriminator='tag') # type: ignore
+    bad_contours: bool | None = None
+    """Whether contours are not good enough to train TATR"""
 
   url: str
   meta: Meta = Field(default_factory=lambda: Image.Meta(boxes=None))
 
-  async def export(self, blobs: KV[bytes], *, pads: sm.Pads = {}):
+  async def export(self, blobs: KV[bytes], *, pads: vc.Pads = {}):
     from .export import boxes
     return await boxes(self, blobs, pads=pads)
   
@@ -73,7 +48,7 @@ class Sheet(BaseModel):
   images: list[Image]
   meta: Meta
 
-  async def boxes(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
+  async def boxes(self, blobs: KV[bytes], *, pads: vc.Pads = {}) -> Either[Any, list[vc.Img]]:
     """Export boxes of the first exportable image. Returns `Left` if none of the images are exportable"""
     for image in self.images:
       boxes = await image.export(blobs, pads=pads)
@@ -109,7 +84,7 @@ class Player(BaseModel):
     boxes_ok = any(img.exportable() for sheet in self.sheets for img in sheet.images)
     return lang_ok and boxes_ok
   
-  async def boxes(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[vc.Img]]:
+  async def boxes(self, blobs: KV[bytes], *, pads: vc.Pads = {}) -> Either[Any, list[vc.Img]]:
     """Export boxes of all exportable sheets.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are."""
@@ -119,7 +94,7 @@ class Player(BaseModel):
     return Right(I.flatten(E.take_while(all_boxes)).sync())
   
   @E.do()
-  async def ocr_samples(self, pgn: Iterable[str], blobs: KV[bytes], *, pads: sm.Pads = {}) -> list[Sample]:
+  async def ocr_samples(self, pgn: Iterable[str], blobs: KV[bytes], *, pads: vc.Pads = {}) -> list[Sample]:
     """Export samples of all exportable sheets.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the first sheet is not exportable. Otherwise returns as many consecutive exportable sheets as there are.
@@ -153,7 +128,7 @@ class Game(BaseModel):
       for k, image in enumerate(sheet.images):
         yield (i, j, k), image
 
-  async def ocr_samples(self, blobs: KV[bytes], *, pads: sm.Pads = {}) -> Either[Any, list[list[Sample]]]:
+  async def ocr_samples(self, blobs: KV[bytes], *, pads: vc.Pads = {}) -> Either[Any, list[list[Sample]]]:
     """Export OCR samples of all players.
     - Only the first exportable image of each sheet is taken.
     - Returns `Left` if the game's meta has no PGN or no player is exportable"""

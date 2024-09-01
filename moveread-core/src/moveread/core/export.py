@@ -62,17 +62,14 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> list[str|None]:
   return labs  
 
 @E.do()
-async def boxes(image: Image, blobs: KV[bytes], *, pads: sm.Pads = {}) -> list[vc.Img]:
-  if isinstance(image.meta, Image.OldMeta):
-    # raise ValueError('OldMeta is not supported')
-    return Left('OldMeta is not supported').unsafe()
+async def boxes(image: Image, blobs: KV[bytes], *, pads: vc.Pads = {}) -> list[vc.Img]:
+  boxes = image.meta.boxes
+  if boxes is None:
+    return Left('No boxes').unsafe()
+  
+  if boxes.tag == 'box-contours':
+    img = vc.decode((await blobs.read(image.url)).unsafe())
+    return vc.extract_contours(img, boxes.contours, **pads)
   else:
-    if image.meta.boxes is None:
-      return Left('No boxes').unsafe()
-    
-    if image.meta.boxes.tag == 'box-contours':
-      img = vc.decode((await blobs.read(image.url)).unsafe())
-      return re.boxes(img, image.meta.boxes.contours, **pads) # type: ignore
-    else:
-      img = vc.decode((await blobs.read(image.url)).unsafe())
-      return sm.extract_boxes(img, image.meta.boxes.model, **image.meta.boxes.coords, pads=pads)
+    img = vc.decode((await blobs.read(image.url)).unsafe())
+    return sm.extract_boxes(img, boxes.model, **boxes.coords, pads=pads)
