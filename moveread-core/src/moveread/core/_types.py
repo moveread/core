@@ -28,8 +28,9 @@ class Image(BaseModel):
     source: ImageSource | None = None
     perspective_corners: 'vc.Corners | None' = None
     boxes: 'Image.Boxes | None' = Field(None, discriminator='tag') # type: ignore
-    bad_contours: bool | None = None
-    """Whether contours are not good enough to train TATR"""
+    # bad_contours: bool | None = None # old -> switched to validated_contours
+    validated_contours: bool | None = None
+    """Manually validated to train TATR?"""
 
   url: str
   meta: Meta = Field(default_factory=lambda: Image.Meta(boxes=None))
