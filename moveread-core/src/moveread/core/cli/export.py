@@ -18,12 +18,10 @@ async def ocr(
   output: str = typer.Option(..., '-o', '--output', help='Output base')
 ):
   """Exports data in `ocr-dataset` format"""
-  games = await cli.read_games(core, True)
-  if games.tag == 'left':
-    return
+  games = [it async for it in core.games.items()]
   
   total_samples = i = 0
-  for i, (id, game) in enumerate(sorted(games.value)):
+  for i, (id, game) in enumerate(sorted(games)):
     base = os.path.join(output, id.replace('/', '-'))
     if (pgn := game.meta.pgn) is None:
       continue
@@ -42,7 +40,7 @@ async def ocr(
       ods.create_tar(f'{base}-{j}', samples, images_name='boxes')
       total_samples += len(samples)
 
-    print(f'\r{i+1}/{len(games.value)} - {total_samples:05} boxes', end='', file=sys.stderr)
+    print(f'\r{i+1}/{len(games)} - {total_samples:05} boxes', end='', file=sys.stderr)
 
 
 @export_app.command()
@@ -53,12 +51,10 @@ async def transformer(
   output: str = typer.Option(..., '-o', '--output', help='Output base'),
 ):
   """Exports PGNs and all boxes in `ocr-dataset` format"""
-  games = await cli.read_games(core, True)
-  if games.tag == 'left':
-    return
+  games = [it async for it in core.games.items()]
   
   total_samples = i = 0
-  for i, (id, game) in enumerate(sorted(games.value)):
+  for i, (id, game) in enumerate(sorted(games)):
     base = os.path.join(output, id.replace('/', '-'))
     if not (pgn := game.meta.pgn):
       continue
@@ -77,4 +73,4 @@ async def transformer(
       ods.create_tar(f'{base}-{j}', samples, images_name='boxes', labels_name='pgn')
       total_samples += len(samples)
 
-    print(f'\r{i+1}/{len(games.value)} - {total_samples:05} boxes', end='', file=sys.stderr)
+    print(f'\r{i+1}/{len(games)} - {total_samples:05} boxes', end='', file=sys.stderr)

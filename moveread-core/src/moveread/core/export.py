@@ -2,7 +2,6 @@ from typing import Iterable, Any
 from haskellian import either as E, Left, Right, Either
 from kv import KV
 import pure_cv as vc
-import robust_extraction2 as re
 import scoresheet_models as sm
 import chess_notation as cn
 import chess_utils as cu
@@ -61,15 +60,17 @@ def labels(pgn: Iterable[str], meta: Player.Meta) -> list[str|None]:
 
   return labs  
 
-@E.do()
-async def boxes(image: Image, blobs: KV[bytes], *, pads: vc.Pads = {}) -> list[vc.Img]:
+async def boxes(image: Image, blobs: KV[bytes], *, pads: vc.Pads = {}) -> Either[str, list[vc.Img]]:
   boxes = image.meta.boxes
   if boxes is None:
-    return Left('No boxes').unsafe()
+    return Left('No boxes')
   
   if boxes.tag == 'box-contours':
-    img = vc.decode((await blobs.read(image.url)).unsafe())
-    return vc.extract_contours(img, boxes.contours, **pads)
+    img = vc.decode(await blobs.read(image.url))
+    if boxes.relative:
+      h, w = img.shape[:2]
+      boxes.contours *= [w, h]
+    return Right(vc.extract_contours(img, boxes.contours, **pads))
   else:
-    img = vc.decode((await blobs.read(image.url)).unsafe())
-    return sm.extract_boxes(img, boxes.model, **boxes.coords, pads=pads)
+    img = vc.decode(await blobs.read(image.url))
+    return Right(sm.extract_boxes(img, boxes.model, **boxes.coords, pads=pads))

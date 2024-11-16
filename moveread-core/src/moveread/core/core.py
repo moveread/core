@@ -1,8 +1,7 @@
 from typing import Sequence, Literal, TextIO
 from dataclasses import dataclass
 import asyncio
-from haskellian import Left, either as E, promise as P
-from kv import KV, ReadError
+from kv import KV
 from ._types import Game
 
 @dataclass
@@ -22,16 +21,18 @@ class Core:
 
   @staticmethod
   def of(games_conn_str: str, blobs_conn_str: str) -> 'Core':
-    return Core(KV.of(games_conn_str, Game), KV.of(blobs_conn_str))
+    return Core(KV.of(games_conn_str, Game), KV.of(blobs_conn_str, bytes))
   
   @staticmethod
   def at(path: str) -> 'Core':
     """The default, filesystem- and sqlite-based `Core`"""
-    from kv import FilesystemKV, SQLiteKV
+    from kv import KV
     import os
+    sqlite_path = os.path.join(path, 'games.sqlite')
+    blobs_path = os.path.join(path, 'blobs')
     return Core(
-      games=SQLiteKV.at(os.path.join(path, 'games.sqlite'), Game, table='games'),
-      blobs=FilesystemKV[bytes](os.path.join(path, 'blobs')),
+      games=KV.of(f'sql+sqlite:///{sqlite_path}?table=games', Game),
+      blobs=KV.of(f'file://{blobs_path}', bytes),
       base_path=path
     )
   
@@ -48,21 +49,19 @@ class Core:
     return Core.at(path)
 
 
-  @E.do[ReadError|ExistentBlobs|ExistentGame]()
-  async def copy(self, fromId: str, other: 'Core', toId: str, *, overwrite: bool = False) -> None:
-    """Copies `fromId` of `self` to `toId` in `other`."""
-    if not overwrite:
-      if (await other.games.has(toId)).unsafe():
-        return Left(ExistentGame()).unsafe()
+  async def copy(self, fromId: str, other: 'Core', toId: str, *, overwrite: bool = False) -> bool:
+    """Copies `fromId` of `self` to `toId` in `other`. Returns `False` if the game already existed in `other` (and `overwrite=False`)."""
+    if not overwrite and (await other.games.has(toId)):
+      return False
 
-    game = (await self.games.read(fromId)).unsafe()
+    game = await self.games.read(fromId)
 
     img_tasks = [self.blobs.copy(img.url, other.blobs, img.url) for _, img in game.images]
-    E.sequence(await P.all(img_tasks)).unsafe()
-    (await other.games.insert(toId, game)).unsafe()
+    await asyncio.gather(*img_tasks)
+    await other.games.insert(toId, game)
+    return True
 
 
-  @E.do[ReadError]()
   async def dump(
     self, other: 'Core', prefix: str = '', *, concurrent: int = 1,
     overwrite: bool = False, logstream: TextIO | None = None
@@ -70,7 +69,7 @@ class Core:
     """Copy all games from `self` to `other`."""
     if logstream:
       print('Reading keys...')
-    keys = await self.games.keys().map(E.unsafe).sync()
+    keys = [key async for key in self.games.keys()]
     semaphore = asyncio.Semaphore(concurrent)
     skipped = 0
     done = 0
@@ -81,11 +80,9 @@ class Core:
         async with semaphore:
           if logstream:
             print(f'\rDownloading... [{done+1}/{len(keys)}] - skipped {skipped}', end='', flush=True, file=logstream)
-          r = await self.copy(key, other, prefix + key, overwrite=overwrite)
-          if isinstance(r.value, ExistentBlobs) or isinstance(r.value, ExistentGame):
+          copied = await self.copy(key, other, prefix + key, overwrite=overwrite)
+          if not copied:
             skipped += 1
-          else:
-            r.unsafe()
           done += 1
       tasks.append(task(key))
     

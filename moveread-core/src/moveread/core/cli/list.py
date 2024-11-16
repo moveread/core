@@ -11,12 +11,8 @@ list_app = typer.Typer(no_args_is_help=True)
 @P.run
 async def players(game: str, core: 'core.Core' = core_dep.Depends()):
   """List players in a game"""
-  e = await core.games.read(game)
-  if e.tag == 'left':
-    print(f'Error downloading "{game}"', e.value, file=sys.stderr)
-    raise typer.Exit(1)
-
-  for i, _ in enumerate(e.value.players):
+  g = await core.games.read(game)
+  for i, _ in enumerate(g.players):
     print(i)
 
 @list_app.command()
@@ -24,8 +20,5 @@ async def players(game: str, core: 'core.Core' = core_dep.Depends()):
 @P.run
 async def games(core: 'core.Core' = core_dep.Depends()):
   """List games in a core"""
-  async for e in core.games.keys():
-    if e.tag == 'left':
-      print(f'Error downloading games', e.value, file=sys.stderr)
-      raise typer.Exit(1)
-    print(e.value)
+  async for game in core.games.keys():
+    print(game)

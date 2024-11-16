@@ -10,24 +10,35 @@ import sequence_edits as se
 from .labels import StylesNA, NA
 
 ImageSource = Literal['robust-extraction', 'manual'] | str
+
+class BoxContours(BaseModel):
+  tag: Literal['box-contours'] = 'box-contours'
+  contours: 'vc.Contours'
+  relative: bool | None = None
+
+class GridCoords(BaseModel):
+  tag: Literal['grid-coords'] = 'grid-coords'
+  model: sm.Model
+  coords: 'vc.Rect'
+  # always relative
+
+class Corners(BaseModel):
+  corners: vc.Corners
+  relative: bool | None = None
+
+Boxes = BoxContours | GridCoords
+
 class Image(BaseModel):
   Source: ClassVar = ImageSource
-
-  class BoxContours(BaseModel):
-    tag: Literal['box-contours'] = 'box-contours'
-    contours: 'vc.Contours'
-
-  class GridCoords(BaseModel):
-    tag: Literal['grid-coords'] = 'grid-coords'
-    model: sm.Model
-    coords: 'vc.Rect'
-
-  Boxes: ClassVar = BoxContours | GridCoords
+  BoxContours: ClassVar = BoxContours
+  GridCoords: ClassVar = GridCoords
+  Boxes: ClassVar = Boxes
+  Corners: ClassVar = Corners
 
   class Meta(BaseModel):
     source: ImageSource | None = None
-    perspective_corners: 'vc.Corners | None' = None
-    boxes: 'Image.Boxes | None' = Field(None, discriminator='tag') # type: ignore
+    perspective_corners: 'Corners | vc.Corners | None' = None
+    boxes: 'Image.Boxes | None' = Field(None, discriminator='tag')
     # bad_contours: bool | None = None # old -> switched to validated_contours
     validated_contours: bool | None = None
     """Manually validated to train TATR?"""
@@ -114,6 +125,7 @@ class Game(BaseModel):
 
   players: list[Player]
   meta: Meta = Field(default_factory=Meta)
+  version: int = 0
 
   @property
   @I.lift
