@@ -1,5 +1,3 @@
-import sys
-from haskellian import either as E
 import typer
 from typer_tools import Dependency, option
 from moveread.core import Core

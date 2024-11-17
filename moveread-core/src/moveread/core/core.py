@@ -28,6 +28,7 @@ class Core:
     """The default, filesystem- and sqlite-based `Core`"""
     from kv import KV
     import os
+    os.makedirs(path, exist_ok=True)
     sqlite_path = os.path.join(path, 'games.sqlite')
     blobs_path = os.path.join(path, 'blobs')
     return Core(
@@ -89,6 +90,53 @@ class Core:
     await asyncio.gather(*tasks)
 
 
+  async def versions(self, key: str, *, ignore_errors: bool = True) -> list[int]:
+    """List all versions of a game, as given by the key convention: `{key}/v{version_number}`.
+    - `ignore_errors`: if `True`, ignores parsing errors for version numbers
+    """
+    keys = [k async for k in self.games.prefix(key).keys()] # [v1, v2, ...]
+    vers = []
+    for k in keys:
+      try:
+        vers.append(int(k.removeprefix('/').removeprefix('v')))
+      except ValueError:
+        if not ignore_errors:
+          raise ValueError(f'Invalid version number: {k}')
+    return vers
+
+  async def insert(self, key: str, game: Game, *, ignore_errors: bool = True) -> int:
+    """Insert a game, autoincrementing the version number.
+    - `key`: version-less key (e.g. 'tnmt/a/1/2')
+    - `ignore_errors`: if `True`, ignores parsing errors for version numbers
+    ----
+    - If no games exist with key `{key}/v{...}`, inserts `{key}/v1`
+    - If games exist with key `{key}/v{...}`, inserts `{key}/v{max+1}`
+    - Sets `game.version` (before inserting) and returns it
+    """
+    vers = await self.versions(key, ignore_errors=ignore_errors)
+    if vers:
+      v = max(vers) + 1
+    else:
+      v = 1
+    new_key = f'{key}/v{v}'
+    game.version = v
+    await self.games.insert(new_key, game)
+    return v
+
+  async def keys(self) -> set[str]:
+    """List all version-less keys of games (removing duplicates)."""
+    out = set()
+    async for k in self.games.keys():
+      out.add(k.split('/v')[0])
+    return out
+
+  async def latest(self, key: str) -> Game:
+    """Get the latest version of a game."""
+    vers = await self.versions(key)
+    if not vers:
+      raise ValueError(f'No versions found for key: {key}')
+    latest_v = max(vers)
+    return await self.games.read(f'{key}/v{latest_v}')
 
 def glob(glob: str, *, recursive: bool = False, err_stream: TextIO | None = None) -> list[Core]:
   """Read all cores that match a glob pattern."""

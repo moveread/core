@@ -18,7 +18,14 @@ async def players(game: str, core: 'core.Core' = core_dep.Depends()):
 @list_app.command()
 @core_dep.inject
 @P.run
-async def games(core: 'core.Core' = core_dep.Depends()):
+async def games(
+  core: 'core.Core' = core_dep.Depends(),
+  ignore_versions: bool = typer.Option(False, '-i', '--ignore-versions', help='List keys ignoring the version schema (listning duplicates)')
+):
   """List games in a core"""
-  async for game in core.games.keys():
-    print(game)
+  if ignore_versions:
+    async for key in core.games.keys():
+      print(key)
+  else:
+    for key in await core.keys():
+      print(key)
