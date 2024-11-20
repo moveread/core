@@ -17,7 +17,7 @@ async def ocr(
   output: str = typer.Option(..., '-o', '--output', help='Output base')
 ):
   """Exports data in `ocr-dataset` format"""
-  games = [it async for it in core.games.items()]
+  games = await core.items()
   
   total_samples = i = 0
   for i, (id, game) in enumerate(sorted(games)):
@@ -50,7 +50,7 @@ async def transformer(
   output: str = typer.Option(..., '-o', '--output', help='Output base'),
 ):
   """Exports PGNs and all boxes in `ocr-dataset` format"""
-  games = [it async for it in core.games.items()]
+  games = await core.items()
   
   total_samples = i = 0
   for i, (id, game) in enumerate(sorted(games)):

@@ -90,30 +90,26 @@ class Core:
     await asyncio.gather(*tasks)
 
 
-  async def versions(self, key: str, *, ignore_errors: bool = True) -> list[int]:
-    """List all versions of a game, as given by the key convention: `{key}/v{version_number}`.
-    - `ignore_errors`: if `True`, ignores parsing errors for version numbers
-    """
-    keys = [k async for k in self.games.prefix(key).keys()] # [v1, v2, ...]
+  async def versions(self, key: str) -> list[int]:
+    """List all versions of a game, as given by the key convention: `{key}/v{version_number}`"""
+    keys = [k async for k in self.games.prefixed(key + '/').keys()] # [v1, v2, ...]
     vers = []
     for k in keys:
       try:
         vers.append(int(k.removeprefix('/').removeprefix('v')))
       except ValueError:
-        if not ignore_errors:
-          raise ValueError(f'Invalid version number: {k}')
+        raise ValueError(f'Invalid version number: {k}')
     return vers
 
-  async def insert(self, key: str, game: Game, *, ignore_errors: bool = True) -> int:
+  async def insert(self, key: str, game: Game) -> int:
     """Insert a game, autoincrementing the version number.
     - `key`: version-less key (e.g. 'tnmt/a/1/2')
-    - `ignore_errors`: if `True`, ignores parsing errors for version numbers
     ----
     - If no games exist with key `{key}/v{...}`, inserts `{key}/v1`
     - If games exist with key `{key}/v{...}`, inserts `{key}/v{max+1}`
     - Sets `game.version` (before inserting) and returns it
     """
-    vers = await self.versions(key, ignore_errors=ignore_errors)
+    vers = await self.versions(key)
     if vers:
       v = max(vers) + 1
     else:
@@ -127,8 +123,17 @@ class Core:
     """List all version-less keys of games (removing duplicates)."""
     out = set()
     async for k in self.games.keys():
-      out.add(k.split('/v')[0])
+      prev, last = k.rsplit('/', 1)
+      if last.startswith('v'):
+        out.add(prev)
+      else:
+        raise ValueError(f'Invalid key: {k}')
+
     return out
+  
+  async def items(self) -> list[tuple[str, Game]]:
+    keys = await self.keys()
+    return [(k, await self.latest(k)) for k in keys]
 
   async def latest(self, key: str) -> Game:
     """Get the latest version of a game."""
